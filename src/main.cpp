@@ -10,7 +10,7 @@
 #define DEVICE_STATUS_UUID       "19B10004-E8F2-537E-4F6C-D104768A1214"
 
 // Pin definitions
-const int VIBRATION_PIN = 5;
+const int VIBRATION_PIN = 2;  // GPIO6 for D6 on XIAO ESP32S3
 const int DEFAULT_HAPTIC_INTENSITY = 128;  // 50% intensity
 
 // Status codes - must match Flutter app
@@ -34,7 +34,7 @@ BLECharacteristic hapticControlChar(HAPTIC_CONTROL_UUID, BLEWrite, sizeof(int));
 BLECharacteristic deviceStatusChar(DEVICE_STATUS_UUID, BLERead | BLENotify, sizeof(int));
 
 // Morse code converter - start with LED only mode
-MorseConverter morse(VIBRATION_PIN, OutputMode::LED_ONLY);
+MorseConverter morse(VIBRATION_PIN, OutputMode::BOTH);
 DeviceStatus currentStatus = IDLE;
 int hapticIntensity = DEFAULT_HAPTIC_INTENSITY;
 
@@ -180,7 +180,7 @@ void loop() {
     if (central) {
         if (!isConnected) {
             isConnected = true;
-            morse.indicateIdle();  // Solid blue when connected
+            morse.indicateIdle();  // Steady LED when connected
             Serial.print(F("Connected to central: "));
             Serial.println(central.address());
         }
@@ -195,11 +195,11 @@ void loop() {
         Serial.print(F("Disconnected from central: "));
         Serial.println(central.address());
     } else {
-        // Blink blue LED while advertising
+        // Blink LED while advertising
         unsigned long now = millis();
         if (now - lastBlink > 500) {  // Blink every 500ms
             blinkState = !blinkState;
-            morse.setRGB(false, false, blinkState);  // Blink blue
+            morse.setLED(blinkState);  // Use the proper LED control method
             lastBlink = now;
         }
         BLE.poll();
