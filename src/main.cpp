@@ -10,7 +10,7 @@
 #define DEVICE_STATUS_UUID       "19B10004-E8F2-537E-4F6C-D104768A1214"
 
 // Pin definitions
-const int VIBRATION_PIN = 2;  // GPIO6 for D6 on XIAO ESP32S3
+const int VIBRATION_PIN = 20;  // GPIO6 for D6 on XIAO ESP32S3
 const int DEFAULT_HAPTIC_INTENSITY = 128;  // 50% intensity
 
 // Status codes - must match Flutter app
@@ -92,14 +92,9 @@ void handleTextInput(BLEDevice central, BLECharacteristic characteristic) {
         return;
     }
 
-    // Update status and play
+    // Start playback (non-blocking)
     updateStatus(PLAYING);
-    
-    // Play the Morse code
-    morse.playMorseCode(morseCode);
-    
-    // Reset status
-    updateStatus(IDLE);
+    morse.startPlayback(morseCode);
 }
 
 void handleHapticControl(BLEDevice central, BLECharacteristic characteristic) {
@@ -109,30 +104,44 @@ void handleHapticControl(BLEDevice central, BLECharacteristic characteristic) {
     }
     
     hapticIntensity = data[0];
+    Serial.print("hapticIntensity: ");
+    Serial.println(hapticIntensity);
     
     // If intensity is 0, switch to LED only mode
     // If intensity is non-zero, switch to both LED and vibration
     morse.setOutputMode(hapticIntensity == 0 ? OutputMode::LED_ONLY : OutputMode::BOTH);
     
     if (hapticIntensity > 0) {
-        analogWrite(morse.getVibrationPin(), hapticIntensity);
+        morse.setPWM(hapticIntensity);
+    } else {
+        morse.setPWM(0);
     }
 }
 
 void blePeripheralConnectHandler(BLEDevice central) {
+    isConnected = true;
     Serial.print(F("Connected to central: "));
-    Serial.println(central.address());
+    Serial.print(central.address());
+    Serial.print(F(" on core "));
+    Serial.println(xPortGetCoreID());
+    morse.indicateIdle();
     updateStatus(IDLE);
 }
 
 void blePeripheralDisconnectHandler(BLEDevice central) {
+    isConnected = false;
     Serial.print(F("Disconnected from central: "));
-    Serial.println(central.address());
+    Serial.print(central.address());
+    Serial.print(F(" on core "));
+    Serial.println(xPortGetCoreID());
     morse.clearStatus();
 }
 
 void setup() {
     Serial.begin(115200);
+    
+    Serial.print(F("Setup running on core "));
+    Serial.println(xPortGetCoreID());
     
     // Don't wait for Serial in production
     #ifdef DEBUG
@@ -171,6 +180,10 @@ void setup() {
     // Start advertising
     BLE.advertise();
     Serial.println(F("MorseCodify device ready!"));
+
+    // Test the non-blocking Morse code playback with a single dot
+    Serial.println(F("Testing Morse code playback..."));
+    morse.startPlayback("---");  // Play a longer test pattern
 }
 
 void loop() {
@@ -178,28 +191,32 @@ void loop() {
     BLEDevice central = BLE.central();
 
     if (central) {
-        if (!isConnected) {
-            isConnected = true;
-            morse.indicateIdle();  // Steady LED when connected
-            Serial.print(F("Connected to central: "));
-            Serial.println(central.address());
-        }
-
+        // Connection handling is now only in the callback handler
         while (central.connected()) {
+            // Update Morse code playback if active
+            morse.updatePlayback();
+            
+            // Check if playback just finished
+            static bool wasPlaying = false;
+            bool isPlaying = morse.isPlaybackActive();
+            if (wasPlaying && !isPlaying) {
+                updateStatus(IDLE);
+            }
+            wasPlaying = isPlaying;
+            
+            // Handle BLE events
             BLE.poll();
         }
 
         // When disconnected
         isConnected = false;
         morse.clearStatus();
-        Serial.print(F("Disconnected from central: "));
-        Serial.println(central.address());
     } else {
         // Blink LED while advertising
         unsigned long now = millis();
         if (now - lastBlink > 500) {  // Blink every 500ms
             blinkState = !blinkState;
-            morse.setLED(blinkState);  // Use the proper LED control method
+            morse.setLED(blinkState);
             lastBlink = now;
         }
         BLE.poll();

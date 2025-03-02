@@ -13,6 +13,14 @@ enum class OutputMode {
 
 #define LED_PIN 21  // Orange user LED 
 
+// Morse playback states
+enum class PlaybackState {
+    IDLE,
+    SYMBOL_ON,
+    SYMBOL_OFF,
+    LETTER_SPACE
+};
+
 class MorseConverter {
 private:
     // Buffer for storing morse code strings
@@ -25,11 +33,27 @@ private:
     static const int LETTER_SPACE = DOT_DURATION * 3;
     static const int WORD_SPACE = DOT_DURATION * 7;
     
+    // PWM configuration
+    static const int pwmFreq = 5000;
+    static const int pwmResolution = 8;
+    static const int pwmChannel = 0;
+    
     // Pin configuration
     uint8_t vibrationPin;
     OutputMode outputMode;
     
+    // Playback state
+    PlaybackState playbackState = PlaybackState::IDLE;
+    const char* currentMorse = nullptr;
+    int currentPosition = 0;
+    unsigned long lastStateChange = 0;
+    unsigned long currentDuration = 0;
+    bool isPlaying = false;
+    
+    // Private methods
     const char* findMorseCode(char c);
+    void setupPWM();
+    void updateOutputs(bool state);
 
 public:
     explicit MorseConverter(uint8_t vib_pin, OutputMode mode = OutputMode::LED_ONLY);
@@ -37,11 +61,14 @@ public:
     void setOutputMode(OutputMode mode);
     OutputMode getOutputMode() const;
     const char* textToMorse(const char* text);
-    void playMorseCode(const char* morse);
-    void playText(const char* text);
+    void startPlayback(const char* morse);  // Non-blocking start
+    void updatePlayback();  // Call this from main loop
+    bool isPlaybackActive() const;
+    void stopPlayback();
     
     // LED control
     void setLED(bool state);  // true = on, false = off (handles active LOW)
+    void setPWM(uint8_t value);  // 0-255 for PWM control
     
     // Status LED patterns
     void indicateIdle();        // Steady on

@@ -15,11 +15,32 @@ void MorseConverter::setLED(bool state) {
     digitalWrite(LED_PIN, !state);  // Active LOW
 }
 
+void MorseConverter::setupPWM() {
+    ledcSetup(pwmChannel, pwmFreq, pwmResolution);
+    ledcAttachPin(vibrationPin, pwmChannel);
+}
+
+void MorseConverter::updateOutputs(bool state) {
+    if (outputMode != OutputMode::LED_ONLY) {
+        ledcWrite(pwmChannel, state ? 140 : 0);
+    }
+    if (outputMode != OutputMode::VIBRATION_ONLY) {
+        setLED(state);
+    }
+}
+
+void MorseConverter::setPWM(uint8_t value) {
+    ledcWrite(pwmChannel, value);
+}
+
 MorseConverter::MorseConverter(uint8_t vib_pin, OutputMode mode) 
     : vibrationPin(vib_pin), outputMode(mode) {
     
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);  // Active LOW, so HIGH = OFF
+    
+    // Set up PWM for vibration
+    setupPWM();
     
     // Startup sequence - three quick blinks
     for (int i = 0; i < 3; i++) {
@@ -29,7 +50,7 @@ MorseConverter::MorseConverter(uint8_t vib_pin, OutputMode mode)
         delay(100);
     }
 
-    if (true) {  // Toggle this to false to disable PWM test
+    if (false) {  // Toggle this to false to disable PWM test
         // Test all pins with PWM
         Serial.println("Testing all pins with PWM...");
         
@@ -89,89 +110,95 @@ const char* MorseConverter::textToMorse(const char* text) {
     return morseBuffer;
 }
 
-void MorseConverter::playMorseCode(const char* morse) {
-    for (int i = 0; morse[i] != '\0'; i++) {
-        switch (morse[i]) {
-            case '.': {
-                if (outputMode != OutputMode::LED_ONLY) {
-                    digitalWrite(vibrationPin, HIGH);
-                }
-                if (outputMode != OutputMode::VIBRATION_ONLY) {
-                    setLED(true);
-                }
-                delay(DOT_DURATION);
-                if (outputMode != OutputMode::LED_ONLY) {
-                    digitalWrite(vibrationPin, LOW);
-                }
-                if (outputMode != OutputMode::VIBRATION_ONLY) {
-                    setLED(false);
-                }
-                delay(SYMBOL_SPACE);
-                break;
-            }
-            case '-': {
-                if (outputMode != OutputMode::LED_ONLY) {
-                    digitalWrite(vibrationPin, HIGH);
-                }
-                if (outputMode != OutputMode::VIBRATION_ONLY) {
-                    setLED(true);
-                }
-                delay(DASH_DURATION);
-                if (outputMode != OutputMode::LED_ONLY) {
-                    digitalWrite(vibrationPin, LOW);
-                }
-                if (outputMode != OutputMode::VIBRATION_ONLY) {
-                    setLED(false);
-                }
-                delay(SYMBOL_SPACE);
-                break;
-            }
-            case ' ': {
-                delay(LETTER_SPACE);
-                break;
-            }
-            default:
-                break;
-        }
+void MorseConverter::startPlayback(const char* morse) {
+    currentMorse = morse;
+    currentPosition = 0;
+    isPlaying = true;
+    playbackState = PlaybackState::SYMBOL_ON;
+    lastStateChange = millis();
+    
+    // Calculate initial duration based on first symbol
+    if (morse && morse[0] != '\0') {
+        currentDuration = (morse[0] == '.') ? DOT_DURATION : DASH_DURATION;
+        updateOutputs(true);
     }
 }
 
-void MorseConverter::playText(const char* text) {
-    const char* morse = textToMorse(text);
-    playMorseCode(morse);
+void MorseConverter::updatePlayback() {
+    if (!isPlaying || !currentMorse) return;
+    
+    unsigned long now = millis();
+    if (now - lastStateChange < currentDuration) return;
+    
+    switch (playbackState) {
+        case PlaybackState::SYMBOL_ON:
+            updateOutputs(false);
+            playbackState = PlaybackState::SYMBOL_OFF;
+            currentDuration = SYMBOL_SPACE;
+            break;
+            
+        case PlaybackState::SYMBOL_OFF:
+        case PlaybackState::LETTER_SPACE:
+            currentPosition++;
+            if (currentMorse[currentPosition] == '\0') {
+                stopPlayback();
+                return;
+            }
+            
+            if (currentMorse[currentPosition] == ' ') {
+                playbackState = PlaybackState::LETTER_SPACE;
+                currentDuration = LETTER_SPACE;
+            } else {
+                playbackState = PlaybackState::SYMBOL_ON;
+                currentDuration = (currentMorse[currentPosition] == '.') ? DOT_DURATION : DASH_DURATION;
+                updateOutputs(true);
+            }
+            break;
+            
+        default:
+            break;
+    }
+    
+    lastStateChange = now;
+}
+
+void MorseConverter::stopPlayback() {
+    isPlaying = false;
+    currentMorse = nullptr;
+    currentPosition = 0;
+    playbackState = PlaybackState::IDLE;
+    updateOutputs(false);
+}
+
+bool MorseConverter::isPlaybackActive() const {
+    return isPlaying;
 }
 
 void MorseConverter::indicateIdle() {
     if (outputMode != OutputMode::VIBRATION_ONLY) {
-        setLED(true);  // Steady on
+        setLED(false);  // Steady on
     }
 }
 
 void MorseConverter::indicateProcessing() {
     if (outputMode != OutputMode::VIBRATION_ONLY) {
-        // Fast blink pattern
-        for (int i = 0; i < 3; i++) {
-            setLED(true);
-            delay(50);
-            setLED(false);
-            delay(50);
-        }
+        setLED(true);
+        delay(50);
+        setLED(false);
     }
 }
 
 void MorseConverter::indicatePlaying() {
     if (outputMode != OutputMode::VIBRATION_ONLY) {
-        // Single blink
         setLED(true);
-        delay(200);
+        delay(50);
         setLED(false);
     }
 }
 
 void MorseConverter::indicateError() {
     if (outputMode != OutputMode::VIBRATION_ONLY) {
-        // Rapid blink pattern
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 3; i++) {
             setLED(true);
             delay(30);
             setLED(false);
@@ -181,7 +208,5 @@ void MorseConverter::indicateError() {
 }
 
 void MorseConverter::clearStatus() {
-    if (outputMode != OutputMode::VIBRATION_ONLY) {
-        setLED(false);  // Off
-    }
+    updateOutputs(false);
 } 
