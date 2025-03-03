@@ -18,6 +18,8 @@ class _MorseScreenState extends State<MorseScreen> {
 
   StreamSubscription? _morseSubscription;
   StreamSubscription? _statusSubscription;
+  StreamSubscription? _connectionSubscription;
+  Timer? _reconnectTimer;
 
   @override
   void initState() {
@@ -65,6 +67,35 @@ class _MorseScreenState extends State<MorseScreen> {
             ),
           );
         }
+      },
+    );
+
+    // Set up connection state monitoring
+    _connectionSubscription = _bleService.connectionStream.listen(
+      (isConnected) {
+        if (!isConnected && mounted) {
+          // Cancel any existing reconnect timer
+          _reconnectTimer?.cancel();
+
+          // Show disconnection message
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Device disconnected'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          // Start a 5-second timer before navigating back
+          _reconnectTimer = Timer(const Duration(seconds: 5), () {
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.pushReplacementNamed(context, '/');
+            }
+          });
+        }
+      },
+      onError: (error) {
+        print('Error monitoring connection: $error');
       },
     );
   }
@@ -242,6 +273,8 @@ class _MorseScreenState extends State<MorseScreen> {
     _textController.dispose();
     _morseSubscription?.cancel();
     _statusSubscription?.cancel();
+    _connectionSubscription?.cancel();
+    _reconnectTimer?.cancel();
     super.dispose();
   }
 }

@@ -26,8 +26,10 @@ class BleService {
   // Stream controllers
   final _morseOutputController = StreamController<String>.broadcast();
   final _deviceStatusController = StreamController<int>.broadcast();
+  final _connectionStateController = StreamController<bool>.broadcast();
   Stream<String> get morseStream => _morseOutputController.stream;
   Stream<int> get deviceStatusStream => _deviceStatusController.stream;
+  Stream<bool> get connectionStream => _connectionStateController.stream;
 
   // Device status codes
   static const int STATUS_IDLE = 0;
@@ -57,8 +59,24 @@ class BleService {
     this.device = device;
 
     try {
+      // Set up connection state listener before connecting
+      device.connectionState.listen((BluetoothConnectionState state) {
+        print('Connection state changed: $state');
+        bool isConnected = state == BluetoothConnectionState.connected;
+        _connectionStateController.add(isConnected);
+
+        if (!isConnected) {
+          // Clean up characteristics on disconnect
+          textInputChar = null;
+          morseOutputChar = null;
+          hapticControlChar = null;
+          deviceStatusChar = null;
+        }
+      });
+
       await device.connect(timeout: const Duration(seconds: 5));
       print('Connected to device');
+      _connectionStateController.add(true);
 
       // Request MTU update for better throughput
       try {
@@ -71,6 +89,7 @@ class BleService {
       await _discoverServices();
     } catch (e) {
       print('Error connecting to device: $e');
+      _connectionStateController.add(false);
       rethrow;
     }
   }
@@ -79,6 +98,7 @@ class BleService {
     if (device != null) {
       print('Disconnecting from device');
       await device!.disconnect();
+      _connectionStateController.add(false);
       device = null;
       textInputChar = null;
       morseOutputChar = null;
@@ -202,5 +222,6 @@ class BleService {
     disconnect();
     _morseOutputController.close();
     _deviceStatusController.close();
+    _connectionStateController.close();
   }
 }

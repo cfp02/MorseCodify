@@ -41,6 +41,7 @@ private:
     // Pin configuration
     uint8_t vibrationPin;
     OutputMode outputMode;
+    uint8_t hapticIntensity = 128;  // Default 50% intensity
     
     // Playback state
     PlaybackState playbackState = PlaybackState::IDLE;
@@ -53,7 +54,7 @@ private:
     // Private methods
     const char* findMorseCode(char c);
     void setupPWM();
-    void updateOutputs(bool state);
+    void updateOutputs(bool state, uint8_t intensity);
 
 public:
     explicit MorseConverter(uint8_t vib_pin, OutputMode mode = OutputMode::LED_ONLY);

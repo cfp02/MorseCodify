@@ -18,11 +18,12 @@ void MorseConverter::setLED(bool state) {
 void MorseConverter::setupPWM() {
     ledcSetup(pwmChannel, pwmFreq, pwmResolution);
     ledcAttachPin(vibrationPin, pwmChannel);
+    ledcWrite(pwmChannel, 0);  // Initialize PWM to 0
 }
 
-void MorseConverter::updateOutputs(bool state) {
+void MorseConverter::updateOutputs(bool state, uint8_t intensity) {
     if (outputMode != OutputMode::LED_ONLY) {
-        ledcWrite(pwmChannel, state ? 140 : 0);
+        ledcWrite(pwmChannel, state ? intensity : 0);
     }
     if (outputMode != OutputMode::VIBRATION_ONLY) {
         setLED(state);
@@ -30,6 +31,7 @@ void MorseConverter::updateOutputs(bool state) {
 }
 
 void MorseConverter::setPWM(uint8_t value) {
+    hapticIntensity = value;
     ledcWrite(pwmChannel, value);
 }
 
@@ -120,7 +122,7 @@ void MorseConverter::startPlayback(const char* morse) {
     // Calculate initial duration based on first symbol
     if (morse && morse[0] != '\0') {
         currentDuration = (morse[0] == '.') ? DOT_DURATION : DASH_DURATION;
-        updateOutputs(true);
+        updateOutputs(true, hapticIntensity);
     }
 }
 
@@ -132,7 +134,7 @@ void MorseConverter::updatePlayback() {
     
     switch (playbackState) {
         case PlaybackState::SYMBOL_ON:
-            updateOutputs(false);
+            updateOutputs(false, hapticIntensity);
             playbackState = PlaybackState::SYMBOL_OFF;
             currentDuration = SYMBOL_SPACE;
             break;
@@ -151,7 +153,7 @@ void MorseConverter::updatePlayback() {
             } else {
                 playbackState = PlaybackState::SYMBOL_ON;
                 currentDuration = (currentMorse[currentPosition] == '.') ? DOT_DURATION : DASH_DURATION;
-                updateOutputs(true);
+                updateOutputs(true, hapticIntensity);
             }
             break;
             
@@ -167,7 +169,7 @@ void MorseConverter::stopPlayback() {
     currentMorse = nullptr;
     currentPosition = 0;
     playbackState = PlaybackState::IDLE;
-    updateOutputs(false);
+    updateOutputs(false, hapticIntensity);
 }
 
 bool MorseConverter::isPlaybackActive() const {
@@ -208,5 +210,5 @@ void MorseConverter::indicateError() {
 }
 
 void MorseConverter::clearStatus() {
-    updateOutputs(false);
+    updateOutputs(false, hapticIntensity);
 } 
