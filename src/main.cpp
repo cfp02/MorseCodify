@@ -181,9 +181,6 @@ void setup() {
     BLE.advertise();
     Serial.println(F("MorseCodify device ready!"));
 
-    // Test the non-blocking Morse code playback with a single dot
-    Serial.println(F("Testing Morse code playback..."));
-    morse.startPlayback(".");  // Play just a single dot for testing
 }
 
 void loop() {
