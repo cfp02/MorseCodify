@@ -32,7 +32,11 @@ void MorseConverter::updateOutputs(bool state, uint8_t intensity) {
 
 void MorseConverter::setPWM(uint8_t value) {
     hapticIntensity = value;
+    
+    // Do a brief demo buzz at the new intensity (one dash length)
     ledcWrite(pwmChannel, value);
+    delay(DASH_DURATION);
+    ledcWrite(pwmChannel, 0);
 }
 
 MorseConverter::MorseConverter(uint8_t vib_pin, OutputMode mode) 

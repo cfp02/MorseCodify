@@ -10,7 +10,7 @@
 #define DEVICE_STATUS_UUID       "19B10004-E8F2-537E-4F6C-D104768A1214"
 
 // Pin definitions
-const int VIBRATION_PIN = 2;  // GPIO6 for D6 on XIAO ESP32S3
+const int VIBRATION_PIN = 5;  // GPIO6 for D6 on XIAO ESP32S3
 const int DEFAULT_HAPTIC_INTENSITY = 128;  // 50% intensity
 
 // Status codes - must match Flutter app
